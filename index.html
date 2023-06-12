@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Connexion UART via Web Bluetooth</title>
+</head>
+
+<body>
+    <h1> BLE Uart Terminal Example </h1>
+    <button id="connectButton" disabled>Connecter</button>
+    <button id="disconnectButton" disabled>Déconnecter</button>
+    <br><br>
+    <textarea id="messageTextarea" rows="4" cols="50"></textarea>
+    <button id="sendButton" disabled>Envoyer</button>
+    <br><br>
+    <textarea id="receivedData" rows="4" cols="50"></textarea>
+
+    <script>
+        let uartServiceUUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";; // UUID du service UART
+        let rxCharacteristicUUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // UUID de la caractéristique de réception
+        let txCharacteristicUUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; // UUID de la caractéristique de transmission
+        let connectButton = document.getElementById('connectButton');
+        let disconnectButton = document.getElementById('disconnectButton');
+        let messageTextarea = document.getElementById('messageTextarea');
+        let sendButton = document.getElementById('sendButton');
+        let receivedDataDiv = document.getElementById('receivedData');
+
+        // Vérifie si le navigateur supporte le Web Bluetooth
+        if ('bluetooth' in navigator) {
+            connectButton.disabled = false;
+        }
+
+        // Fonction pour se connecter à l'appareil Bluetooth
+        async function connect() {
+            try {
+                // Demande à l'utilisateur de sélectionner un appareil Bluetooth
+                let device = await navigator.bluetooth.requestDevice({
+                    filters: [{ services: [uartServiceUUID] }]
+                });
+
+                // Se connecte à l'appareil sélectionné
+                let server = await device.gatt.connect();
+
+                // Récupère le service UART
+                uartService = await server.getPrimaryService(uartServiceUUID);
+
+                // Récupère les caractéristiques RX et TX
+                rxCharacteristic = await uartService.getCharacteristic(rxCharacteristicUUID);
+                txCharacteristic = await uartService.getCharacteristic(txCharacteristicUUID);
+
+                // Active les boutons de déconnexion et d'envoi
+                disconnectButton.disabled = false;
+                sendButton.disabled = false;
+
+                // Ecoute les notifications de la caractéristique RX
+                rxCharacteristic.addEventListener('characteristicvaluechanged', handleRXNotification);
+                await rxCharacteristic.startNotifications();
+            } catch (error) {
+                console.error('Erreur de connexion :', error);
+            }
+        }
+
+        // Fonction pour se déconnecter de l'appareil Bluetooth
+        async function disconnect() {
+            if (uartService) {
+                await uartService.device.gatt.disconnect();
+                uartService = null;
+                rxCharacteristic = null;
+                txCharacteristic = null;
+
+                // Désactive les boutons de déconnexion et d'envoi
+                disconnectButton.disabled = true;
+                sendButton.disabled = true;
+            }
+        }
+
+        // Fonction pour envoyer un message à l'appareil Bluetooth
+        async function sendMessage() {
+            let message = messageTextarea.value;
+            let encoder = new TextEncoder();
+
+            // Envoie le message encodé en tant que tableau d'octets
+            await txCharacteristic.writeValue(encoder.encode(message));
+        }
+
+        // Fonction pour gérer les notifications de la caractéristique RX
+        function handleRXNotification(event) {
+            let decoder = new TextDecoder();
+            let receivedData = decoder.decode(event.target.value);
+
+            // Affiche les données reçues dans la page
+            receivedDataDiv.innerHTML += "\n" + receivedData;
+            receivedDataDiv.scrollTop = receivedDataDiv.scrollHeight;
+        }
+
+        connectButton.addEventListener('click', connect);
+        disconnectButton.addEventListener('click', disconnect);
+        sendButton.addEventListener('click', sendMessage);
+
+    </script>
+</body>
+
+</html>
